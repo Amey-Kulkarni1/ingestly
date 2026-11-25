@@ -293,8 +293,42 @@
       transition: border 0.15s;
     }
 
-    input[type="text"]:focus, select:focus {
+    input[type="text"]:focus, input[type="number"]:focus, select:focus {
       border-color: var(--accent);
+    }
+
+    .sortable-th {
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.15s;
+    }
+
+    .sortable-th:hover {
+      color: #fff;
+    }
+
+    .sort-indicator {
+      margin-left: 0.3rem;
+      font-size: 0.7rem;
+      color: var(--accent);
+    }
+
+    .filter-row th {
+      padding: 0.45rem 0.75rem;
+      background: rgba(15, 23, 42, 0.7);
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .col-filter {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 0.32rem 0.5rem;
+      border-radius: 6px;
+      font-family: var(--font-main);
+      font-size: 0.76rem;
+      outline: none;
     }
 
     .btn {
@@ -706,27 +740,20 @@
       <!-- Events Filter Toolbar -->
       <div class="toolbar">
         <div class="filter-group">
-          <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">SOURCE:</label>
-          <select id="filter-source" onchange="resetAndFetch()">
-            <option value="">All Sources</option>
-            <option value="auth0">Auth0</option>
-            <option value="stripe">Stripe</option>
-            <option value="github">GitHub</option>
-            <option value="datadog">Datadog</option>
-            <option value="k8s">Kubernetes</option>
-            <option value="simulator">Simulator</option>
-          </select>
-
-          <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-left: 0.5rem;">PAGE SIZE:</label>
+          <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">PAGE SIZE:</label>
           <select id="page-size" onchange="resetAndFetch()">
             <option value="25">25 items</option>
             <option value="50" selected>50 items</option>
             <option value="100">100 items</option>
           </select>
+
+          <button class="btn" onclick="resetAllFilters()" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">
+            Clear Filters &amp; Sort
+          </button>
         </div>
 
         <div style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--text-muted);">
-          Keyset Seek: <span id="current-cursor-display" style="color: #a5b4fc;">first page</span>
+          Seek: <span id="current-cursor-display" style="color: #a5b4fc;">First Page</span>
         </div>
       </div>
 
@@ -735,13 +762,47 @@
         <table>
           <thead>
             <tr>
-              <th style="width: 80px;">ID</th>
-              <th style="width: 120px;">Source</th>
-              <th style="width: 240px;">Event Type</th>
-              <th style="width: 100px;">Status</th>
+              <th class="sortable-th" style="width: 90px;" onclick="toggleSort('id')">ID<span class="sort-indicator" id="sort-id"></span></th>
+              <th class="sortable-th" style="width: 140px;" onclick="toggleSort('source')">Source<span class="sort-indicator" id="sort-source"></span></th>
+              <th class="sortable-th" style="width: 240px;" onclick="toggleSort('event_type')">Event Type<span class="sort-indicator" id="sort-event_type"></span></th>
+              <th class="sortable-th" style="width: 120px;" onclick="toggleSort('status')">Status<span class="sort-indicator" id="sort-status"></span></th>
               <th style="width: 140px;">Outbox Status</th>
-              <th>Received At</th>
+              <th class="sortable-th" onclick="toggleSort('received_at')">Received At<span class="sort-indicator" id="sort-received_at">▼</span></th>
               <th style="text-align: right; width: 100px;">Action</th>
+            </tr>
+            <tr class="filter-row">
+              <th><input type="number" class="col-filter" id="filter-id" placeholder="ID..." min="1" oninput="debouncedResetAndFetch()"></th>
+              <th>
+                <select class="col-filter" id="filter-source" onchange="resetAndFetch()">
+                  <option value="">All Sources</option>
+                </select>
+              </th>
+              <th>
+                <select class="col-filter" id="filter-event-type" onchange="resetAndFetch()">
+                  <option value="">All Event Types</option>
+                </select>
+              </th>
+              <th>
+                <select class="col-filter" id="filter-status" onchange="resetAndFetch()">
+                  <option value="">All Statuses</option>
+                  <option value="received">received</option>
+                  <option value="processing">processing</option>
+                  <option value="processed">processed</option>
+                  <option value="failed">failed</option>
+                  <option value="replayed">replayed</option>
+                </select>
+              </th>
+              <th>
+                <select class="col-filter" id="filter-outbox" onchange="resetAndFetch()">
+                  <option value="">All Outbox</option>
+                  <option value="true">Published</option>
+                  <option value="false">Pending</option>
+                </select>
+              </th>
+              <th style="font-size: 0.72rem; color: var(--text-muted); font-weight: 400;">Click headers to sort</th>
+              <th style="text-align: right;">
+                <button class="btn" onclick="resetAllFilters()" style="padding: 0.25rem 0.5rem; font-size: 0.72rem;">Reset</button>
+              </th>
             </tr>
           </thead>
           <tbody id="events-table-body">
@@ -909,6 +970,11 @@
     const eventsMap = new Map();
     let currentCursor = null;
     let nextCursor = null;
+    let currentOffset = 0;
+    let sortBy = 'received_at';
+    let sortDir = 'desc';
+    let eventsAbortController = null;
+    let filterDebounceTimer = null;
     let activeTab = 'events';
     let pollInterval = null;
     let rawObjCache = null;
@@ -954,39 +1020,128 @@
       }
     }
 
-    // Keyset pagination methods
+    // Keyset & offset pagination + sort/filter methods
+    function debouncedResetAndFetch() {
+      clearTimeout(filterDebounceTimer);
+      filterDebounceTimer = setTimeout(() => resetAndFetch(), 250);
+    }
+
     function resetAndFetch() {
       currentCursor = null;
+      nextCursor = null;
+      currentOffset = 0;
       fetchEvents();
     }
 
     function goToFirstPage() {
       currentCursor = null;
+      nextCursor = null;
+      currentOffset = 0;
       fetchEvents();
     }
 
     function goToNextPage() {
-      if (nextCursor) {
-        currentCursor = nextCursor;
+      const limit = parseInt(document.getElementById('page-size').value, 10) || 50;
+      if (sortBy === 'received_at' && sortDir === 'desc') {
+        if (nextCursor) {
+          currentCursor = nextCursor;
+          fetchEvents();
+        }
+      } else {
+        currentOffset += limit;
         fetchEvents();
       }
     }
 
-    async function fetchEvents() {
-      const limit = document.getElementById('page-size').value;
-      const source = document.getElementById('filter-source').value;
-      let url = `/api/v1/events?limit=${limit}`;
-      if (currentCursor) {
-        url += `&cursor=${encodeURIComponent(currentCursor)}`;
+    function toggleSort(column) {
+      if (sortBy === column) {
+        sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+      } else {
+        sortBy = column;
+        sortDir = (column === 'id' || column === 'received_at') ? 'desc' : 'asc';
       }
-      if (source) {
-        url += `&source=${encodeURIComponent(source)}`;
+      updateSortIndicators();
+      resetAndFetch();
+    }
+
+    function updateSortIndicators() {
+      ['id', 'source', 'event_type', 'status', 'received_at'].forEach(col => {
+        const el = document.getElementById(`sort-${col}`);
+        if (!el) return;
+        el.innerText = col === sortBy ? (sortDir === 'asc' ? '▲' : '▼') : '';
+      });
+    }
+
+    function resetAllFilters() {
+      document.getElementById('filter-id').value = '';
+      document.getElementById('filter-source').value = '';
+      document.getElementById('filter-event-type').value = '';
+      document.getElementById('filter-status').value = '';
+      document.getElementById('filter-outbox').value = '';
+      sortBy = 'received_at';
+      sortDir = 'desc';
+      updateSortIndicators();
+      resetAndFetch();
+    }
+
+    async function fetchFacets() {
+      try {
+        const res = await fetch('/api/v1/events/facets');
+        if (!res.ok) return;
+        const facets = await res.json();
+
+        const srcSel = document.getElementById('filter-source');
+        const curSrc = srcSel.value;
+        srcSel.innerHTML = '<option value="">All Sources</option>' +
+          (facets.sources || []).map(s => `<option value="${s}">${s}</option>`).join('');
+        srcSel.value = curSrc;
+
+        const typeSel = document.getElementById('filter-event-type');
+        const curType = typeSel.value;
+        typeSel.innerHTML = '<option value="">All Event Types</option>' +
+          (facets.event_types || []).map(t => `<option value="${t}">${t}</option>`).join('');
+        typeSel.value = curType;
+      } catch (err) {
+        console.error('Error fetching facets:', err);
+      }
+    }
+
+    async function fetchEvents() {
+      if (eventsAbortController) {
+        eventsAbortController.abort();
+      }
+      eventsAbortController = new AbortController();
+
+      const limit = document.getElementById('page-size').value;
+      const eventId = document.getElementById('filter-id').value.trim();
+      const source = document.getElementById('filter-source').value;
+      const eventType = document.getElementById('filter-event-type').value;
+      const statusVal = document.getElementById('filter-status').value;
+      const outboxVal = document.getElementById('filter-outbox').value;
+
+      let url = `/api/v1/events?limit=${limit}&sort_by=${encodeURIComponent(sortBy)}&sort_dir=${encodeURIComponent(sortDir)}`;
+      const isDefaultSort = sortBy === 'received_at' && sortDir === 'desc';
+
+      if (isDefaultSort && currentCursor) {
+        url += `&cursor=${encodeURIComponent(currentCursor)}`;
+      } else if (!isDefaultSort && currentOffset > 0) {
+        url += `&offset=${currentOffset}`;
       }
 
-      document.getElementById('current-cursor-display').innerText = currentCursor ? currentCursor.substring(0, 16) + '...' : 'First Page';
+      if (eventId) url += `&event_id=${encodeURIComponent(eventId)}`;
+      if (source) url += `&source=${encodeURIComponent(source)}`;
+      if (eventType) url += `&event_type=${encodeURIComponent(eventType)}`;
+      if (statusVal) url += `&status=${encodeURIComponent(statusVal)}`;
+      if (outboxVal) url += `&outbox_published=${encodeURIComponent(outboxVal)}`;
+
+      const isFirstPage = isDefaultSort ? !currentCursor : currentOffset === 0;
+      document.getElementById('current-cursor-display').innerText = isFirstPage
+        ? 'First Page'
+        : (isDefaultSort ? currentCursor.substring(0, 16) + '...' : `Offset ${currentOffset}`);
+      document.getElementById('btn-prev-page').disabled = isFirstPage;
 
       try {
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: eventsAbortController.signal });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
@@ -996,13 +1151,14 @@
         nextBtn.disabled = !data.has_more;
         document.getElementById('page-count-display').innerText = data.items.length;
 
-        // If on first page and no source filter, update aggregate stats
-        if (!currentCursor && !source && data.items.length > 0) {
-          const totalEstimate = data.items[0].id;
-          document.getElementById('stat-total-events').innerText = totalEstimate.toLocaleString();
+        // If on first page and no filters, update aggregate stats
+        if (isFirstPage && !source && !eventType && !statusVal && !eventId && !outboxVal && data.items.length > 0) {
+          document.getElementById('stat-total-events').innerText = data.total.toLocaleString();
         }
       } catch (err) {
-        console.error("Error fetching events:", err);
+        if (err.name !== 'AbortError') {
+          console.error("Error fetching events:", err);
+        }
       }
     }
 
@@ -1357,9 +1513,11 @@
     }
 
     // Automatic polling loop
+    fetchFacets();
     fetchEvents();
     fetchTelemetry();
     setInterval(() => {
+      fetchFacets();
       fetchEvents();
       fetchTelemetry();
     }, 3000);

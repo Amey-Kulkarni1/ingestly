@@ -484,6 +484,25 @@ async def test_rate_limiting_returns_429(client: AsyncClient, monkeypatch):
     assert "Retry-After" in r_limited.headers
 
 
+@pytest.mark.asyncio
+async def test_list_events_sort_and_column_filters(client: AsyncClient):
+    await client.post("/api/v1/events", json={"delivery_id": "sf-1", "source": "alpha", "event_type": "z.type", "data": {}})
+    await client.post("/api/v1/events", json={"delivery_id": "sf-2", "source": "beta", "event_type": "a.type", "data": {}})
+
+    # Sort by source asc
+    r_sort = await client.get("/api/v1/events?sort_by=source&sort_dir=asc")
+    assert r_sort.status_code == 200
+    sources = [item["source"] for item in r_sort.json()["items"]]
+    assert sources == ["alpha", "beta"]
+
+    # Filter by outbox_published=true and event_id
+    first_id = r_sort.json()["items"][0]["id"]
+    r_filt = await client.get(f"/api/v1/events?event_id={first_id}&outbox_published=true")
+    assert r_filt.status_code == 200
+    assert r_filt.json()["total"] == 1
+    assert r_filt.json()["items"][0]["id"] == first_id
+
+
 
 
 

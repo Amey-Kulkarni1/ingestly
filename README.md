@@ -45,7 +45,13 @@ Ingestly acknowledges incoming webhooks with low latency (`~60 ms` p50 unloaded,
 
 ## Operations Dashboard
 
-![Ingestly Operations Console](docs/dashboard.png)
+**Live Events Stream (keyset pagination, per-column sort & filters, JSON inspect & replay):**
+
+![Ingestly Live Events Stream](docs/dashboard.png)
+
+**Infrastructure & Health (live throughput chart, container topology, resource telemetry & retention):**
+
+![Ingestly Infrastructure & Health](docs/dashboard-health.png)
 
 Authenticated via HTTP Basic Auth (any username, `REPLAY_API_KEY` as password) or `X-API-Key` / `Bearer` header at `http://localhost:8000/dashboard`.
 

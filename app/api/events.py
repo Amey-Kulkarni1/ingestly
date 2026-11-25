@@ -5,7 +5,7 @@ from typing import Any, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import status as http_status
-from sqlalchemy import CursorResult, and_, func, or_, select, update
+from sqlalchemy import CursorResult, and_, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -34,14 +34,39 @@ async def list_events(
     status: Optional[str] = Query(None, description="Filter by status: received, processed, failed"),
     event_type: Optional[str] = Query(None, description="Filter by event type"),
     source: Optional[str] = Query(None, description="Filter by source"),
+    event_id: Optional[int] = Query(None, ge=1, description="Filter by exact event ID"),
+    outbox_published: Optional[bool] = Query(None, description="Filter by outbox published state"),
+    sort_by: str = Query("received_at", description="Sort column: id, source, event_type, status, received_at"),
+    sort_dir: str = Query("desc", description="Sort direction: asc or desc"),
     limit: int = Query(20, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     cursor: Optional[str] = Query(None, description="Keyset cursor for O(1) pagination without offset scan"),
     db: AsyncSession = Depends(get_db),
 ):
+    sort_columns = {
+        "id": RawEvent.id,
+        "source": RawEvent.source,
+        "event_type": RawEvent.event_type,
+        "status": RawEvent.status,
+        "received_at": RawEvent.received_at,
+    }
+    if sort_by not in sort_columns:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid sort_by '{sort_by}'. Allowed: {', '.join(sort_columns)}",
+        )
+    if sort_dir not in ("asc", "desc"):
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid sort_dir. Allowed: asc, desc",
+        )
+
     query = select(RawEvent).options(selectinload(RawEvent.processed_record))
     count_query = select(func.count(RawEvent.id))
 
+    if event_id is not None:
+        query = query.where(RawEvent.id == event_id)
+        count_query = count_query.where(RawEvent.id == event_id)
     if status:
         query = query.where(RawEvent.status == status)
         count_query = count_query.where(RawEvent.status == status)
@@ -51,11 +76,21 @@ async def list_events(
     if source:
         query = query.where(RawEvent.source == source)
         count_query = count_query.where(RawEvent.source == source)
+    if outbox_published is not None:
+        pending_exists = exists().where(
+            OutboxEvent.raw_event_id == RawEvent.id,
+            OutboxEvent.published == False,
+        )
+        cond = ~pending_exists if outbox_published else pending_exists
+        query = query.where(cond)
+        count_query = count_query.where(cond)
 
     total = (await db.execute(count_query)).scalar_one()
 
-    # Keyset (cursor-based) pagination seek on (received_at, id)
-    if cursor:
+    is_default_keyset = sort_by == "received_at" and sort_dir == "desc"
+
+    # Keyset (cursor-based) pagination seek on (received_at, id) for default sort
+    if cursor and is_default_keyset:
         try:
             decoded = base64.urlsafe_b64decode(cursor.encode("utf-8")).decode("utf-8")
             cur_ts_str, cur_id_str = decoded.split("|")
@@ -76,8 +111,11 @@ async def list_events(
 
         query = query.order_by(RawEvent.received_at.desc(), RawEvent.id.desc()).limit(limit + 1)
     else:
-        # Fallback to offset if specified, otherwise index-ordered
-        query = query.order_by(RawEvent.received_at.desc(), RawEvent.id.desc()).limit(limit + 1)
+        col = sort_columns[sort_by]
+        primary_order = col.asc() if sort_dir == "asc" else col.desc()
+        tie_order = RawEvent.id.asc() if sort_dir == "asc" else RawEvent.id.desc()
+        order_clauses = [primary_order] if sort_by == "id" else [primary_order, tie_order]
+        query = query.order_by(*order_clauses).limit(limit + 1)
         if offset > 0:
             query = query.offset(offset)
 
@@ -106,7 +144,7 @@ async def list_events(
         response_items.append(item_model)
 
     next_cursor = None
-    if has_more and items:
+    if has_more and items and is_default_keyset:
         last = items[-1]
         next_cursor = base64.urlsafe_b64encode(
             f"{last.received_at.isoformat()}|{last.id}".encode("utf-8")
