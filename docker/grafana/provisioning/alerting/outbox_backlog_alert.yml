@@ -1,0 +1,93 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: event-pipeline-alerts
+    folder: Event Pipeline
+    interval: 30s
+    rules:
+      - uid: outbox-backlog-high
+        title: Outbox Backlog High
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: outbox_backlog_size
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              type: reduce
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [100]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+              expression: B
+              type: threshold
+              refId: C
+        for: 1m
+        annotations:
+          summary: Outbox backlog exceeds 100 unpublished events
+      - uid: outbox-age-high
+        title: Outbox Oldest Pending Age High
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: outbox_oldest_pending_age_seconds
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              type: reduce
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [60]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+              expression: B
+              type: threshold
+              refId: C
+        for: 1m
+        annotations:
+          summary: Oldest unpublished outbox event is older than 60 seconds
+

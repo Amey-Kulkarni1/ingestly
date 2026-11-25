@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unified Ingestion Platform | Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(17, 24, 39, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-hover: rgba(255, 255, 255, 0.12);
+      --accent: #4f46e5;
+      --accent-hover: #4338ca;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --code-bg: #060911;
+      --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    /* Selection */
+    ::selection {
+      background: rgba(79, 70, 229, 0.4);
+      color: #fff;
+    }
+
+    /* Tabular numerals for data precision */
+    .stat-val, td, .metric-val, #current-cursor-display, .badge {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Focus accessibility */
+    button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* Top Navigation Header */
+    header {
+      background: rgba(10, 15, 29, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--card-border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      padding: 0.85rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .brand-icon svg { width: 18px; height: 18px; fill: white; }
+
+    .brand-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    /* Tabs Navigation */
+    .tab-bar {
+      display: flex;
+      gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 0.25rem;
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+    }
+
+    .tab-btn {
+      padding: 0.5rem 1.1rem;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font-main);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-btn.active {
+      color: #fff;
+      background: var(--accent);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .pill-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #6ee7b7;
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+
+    .dot-status {
+      width: 7px;
+      height: 7px;
+      background: var(--success);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      padding: 1.75rem 2rem;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.25s ease;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Grid cards */
+    .grid-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s ease;
+    }
+
+    .card:hover {
+      border-color: var(--card-hover);
+    }
+
+    .stat-title {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .stat-val {
+      font-size: 1.75rem;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      color: #fff;
+    }
+
+    .stat-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.35rem;
+    }
+
+    /* Toolbar for Events */
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 0.9rem 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    input[type="text"], select {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 0.5rem 0.85rem;
+      border-radius: 8px;
+      font-family: var(--font-main);
+      font-size: 0.85rem;
+      outline: none;
+      transition: border 0.15s;
+    }
+
+    input[type="text"]:focus, select:focus {
+      border-color: var(--accent);
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 0.5rem 0.95rem;
+      border-radius: 8px;
+      font-family: var(--font-main);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.25);
+    }
+
+    /* Events Table */
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      overflow-x: auto;
+      margin-bottom: 1.25rem;
+      padding: 0.5rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+
+    thead th {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 0.85rem 1.1rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--card-border);
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+    }
+
+    thead th:first-child {
+      border-top-left-radius: 8px;
+    }
+    thead th:last-child {
+      border-top-right-radius: 8px;
+    }
+
+    tbody tr {
+      transition: background 0.15s ease;
+    }
+
+    tbody tr:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    tbody td {
+      padding: 0.85rem 1.1rem;
+      vertical-align: middle;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.55rem;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+    }
+
+    .badge-source {
+      background: rgba(79, 70, 229, 0.15);
+      color: #c7d2fe;
+      border: 1px solid rgba(79, 70, 229, 0.35);
+    }
+
+    .badge-status {
+      background: rgba(16, 185, 129, 0.15);
+      color: #a7f3d0;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+
+    .badge-outbox-true {
+      background: rgba(16, 185, 129, 0.15);
+      color: #a7f3d0;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+
+    .badge-outbox-false {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fde68a;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    /* Pagination controls */
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 0.85rem 1.25rem;
+    }
+
+    /* Health & Topology Layout */
+    .health-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .container-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+
+    .container-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .container-name {
+      font-weight: 700;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .metric-val {
+      font-family: var(--font-mono);
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .progress-bar-bg {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 9999px;
+      height: 8px;
+      overflow: hidden;
+      margin-top: 0.25rem;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #10b981);
+      border-radius: 9999px;
+      transition: width 0.4s ease;
+    }
+
+    /* Throughput Canvas Graph */
+    .chart-container {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    canvas#throughputChart {
+      width: 100%;
+      height: 200px;
+      display: block;
+    }
+
+    /* Inspect Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.8);
+      backdrop-filter: blur(6px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal-box {
+      background: #0d1322;
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 900px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    }
+
+    .modal-header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .modal-body {
+      padding: 1.5rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .json-block {
+      background: var(--code-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 1rem;
+      position: relative;
+    }
+
+    .json-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.6rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .json-actions {
+      display: flex;
+      gap: 0.4rem;
+    }
+
+    pre.code-view {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: #93c5fd;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    pre.code-view.minimized {
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      max-height: 2.2rem;
+      display: block;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: #1f2937;
+      border: 1px solid var(--card-border);
+      color: #fff;
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      z-index: 200;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.25s ease;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <div>
+        <div class="brand-title">Unified Ingestion Engine</div>
+        <div class="brand-sub">Event Ingestion Console • PostgreSQL • RabbitMQ</div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('events')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+        Live Events Stream
+      </button>
+      <button class="tab-btn" onclick="switchTab('health')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        Infrastructure & Health
+      </button>
+    </div>
+
+    <div class="nav-actions">
+      <div class="pill-status" id="livePill">
+        <span class="dot-status"></span>
+        <span id="pollIndicator">LIVE POLLING (3s)</span>
+      </div>
+      <button class="btn" onclick="triggerRefresh()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+        Refresh
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- TAB 1: LIVE EVENTS STREAM -->
+    <section id="tab-events" class="tab-content active">
+      <!-- High Level Metrics -->
+      <div class="grid-stats">
+        <div class="card">
+          <div class="stat-title">Total Ingested Events</div>
+          <div class="stat-val" id="stat-total-events">-</div>
+          <div class="stat-sub">Persisted in Raw Events table</div>
+        </div>
+        <div class="card">
+          <div class="stat-title">Outbox Processed</div>
+          <div class="stat-val" id="stat-outbox-processed" style="color: #10b981;">-</div>
+          <div class="stat-sub">Published to RabbitMQ topic</div>
+        </div>
+        <div class="card">
+          <div class="stat-title">Pending Ingestion Queue</div>
+          <div class="stat-val" id="stat-outbox-pending" style="color: #f59e0b;">-</div>
+          <div class="stat-sub">Transactions awaiting dispatch</div>
+        </div>
+        <div class="card">
+          <div class="stat-title">Current Ingestion Rate</div>
+          <div class="stat-val" id="stat-rate">0.0 <span style="font-size:0.9rem; font-weight:normal; color:var(--text-muted)">ev/s</span></div>
+          <div class="stat-sub">Dynamic compute over sliding window</div>
+        </div>
+      </div>
+
+      <!-- Events Filter Toolbar -->
+      <div class="toolbar">
+        <div class="filter-group">
+          <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">SOURCE:</label>
+          <select id="filter-source" onchange="resetAndFetch()">
+            <option value="">All Sources</option>
+            <option value="auth0">Auth0</option>
+            <option value="stripe">Stripe</option>
+            <option value="github">GitHub</option>
+            <option value="datadog">Datadog</option>
+            <option value="k8s">Kubernetes</option>
+            <option value="simulator">Simulator</option>
+          </select>
+
+          <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-left: 0.5rem;">PAGE SIZE:</label>
+          <select id="page-size" onchange="resetAndFetch()">
+            <option value="25">25 items</option>
+            <option value="50" selected>50 items</option>
+            <option value="100">100 items</option>
+          </select>
+        </div>
+
+        <div style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--text-muted);">
+          Keyset Seek: <span id="current-cursor-display" style="color: #a5b4fc;">first page</span>
+        </div>
+      </div>
+
+      <!-- Events Table -->
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 80px;">ID</th>
+              <th style="width: 120px;">Source</th>
+              <th style="width: 240px;">Event Type</th>
+              <th style="width: 100px;">Status</th>
+              <th style="width: 140px;">Outbox Status</th>
+              <th>Received At</th>
+              <th style="text-align: right; width: 100px;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="events-table-body">
+            <tr>
+              <td colspan="7" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+                Streaming logs from PostgreSQL...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Keyset Pagination Bar -->
+      <div class="pagination-bar">
+        <div style="font-size: 0.85rem; color: var(--text-muted);">
+          Showing up to <span id="page-count-display">0</span> records on this slice
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn" id="btn-prev-page" onclick="goToFirstPage()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            First / Reset
+          </button>
+          <button class="btn btn-primary" id="btn-next-page" onclick="goToNextPage()" disabled>
+            Next Keyset Page
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: INFRASTRUCTURE & CONTAINER HEALTH -->
+    <section id="tab-health" class="tab-content">
+      <!-- Live Throughput Canvas -->
+      <div class="chart-container">
+        <div class="chart-header">
+          <div>
+            <h3 style="font-size: 1rem; font-weight: 700;">Live Realtime Ingestion Throughput</h3>
+            <p style="font-size: 0.78rem; color: var(--text-muted);">Moving velocity in events per second</p>
+          </div>
+          <div style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--success);" id="live-rps-badge">
+            0.0 RPS
+          </div>
+        </div>
+        <canvas id="throughputChart"></canvas>
+      </div>
+
+      <!-- Container Topology Grid -->
+      <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+        Distributed Service Topology & Container Health
+      </h3>
+
+      <div class="health-grid" id="container-topology-cards">
+        <!-- Cards will be populated dynamically by JavaScript -->
+        <div class="card" style="text-align: center; padding: 2rem;">Querying infrastructure telemetry...</div>
+      </div>
+
+      <!-- Host Hardware Resource Card & Retention Controls -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+        <!-- Host System Metrics -->
+        <div class="card">
+          <div class="stat-title">Host Server Telemetry</div>
+          <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 1rem;">
+            <div>
+              <div class="metric-row">
+                <span>System RAM Utilization</span>
+                <span class="metric-val" id="metric-ram">-</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div class="progress-fill" id="fill-ram" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="metric-row">
+                <span>CPU Load (Global)</span>
+                <span class="metric-val" id="metric-cpu">-</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div class="progress-fill" id="fill-cpu" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="metric-row">
+                <span>Primary Volume Disk Space</span>
+                <span class="metric-val" id="metric-disk">-</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div class="progress-fill" id="fill-disk" style="width: 0%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Database Storage & Retention Cleanup Control -->
+        <div class="card">
+          <div class="stat-title">
+            <span>Automated Retention Engine</span>
+            <span class="badge" style="background: rgba(99,102,241,0.2); color:#a5b4fc;">Active Scheduler</span>
+          </div>
+
+          <div style="margin-top: 0.8rem; font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">
+            The background daemon continuously purges expired records to guarantee bounded disk usage:
+            <ul style="margin: 0.5rem 0 0.5rem 1.25rem; font-size: 0.8rem;">
+              <li><strong>Published Outbox events:</strong> Pruned after 24 hours</li>
+              <li><strong>Raw Event logs:</strong> Pruned after 7 days</li>
+            </ul>
+          </div>
+
+          <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 0.75rem; color: var(--text-muted);" id="retention-status-msg">
+              Ready for immediate execution
+            </div>
+            <button class="btn btn-danger" id="btn-prune" onclick="executeManualRetention()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              Prune Stale Records Now
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Inspect Event Modal with Raw & Normalized JSON Formatting -->
+  <div class="modal-overlay" id="inspectModal" onclick="closeInspect(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-title" id="inspect-title">Event Inspection</div>
+        <button class="btn" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Raw Payload -->
+        <div class="json-block">
+          <div class="json-header">
+            <span>ORIGINAL RAW PAYLOAD</span>
+            <div class="json-actions">
+              <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.72rem;" onclick="toggleFormat('raw')">Format / Compact</button>
+              <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.72rem;" onclick="copyJson('raw')">Copy Raw JSON</button>
+            </div>
+          </div>
+          <pre class="code-view minimized" id="inspect-raw-payload"></pre>
+        </div>
+
+        <!-- Normalized Payload -->
+        <div class="json-block">
+          <div class="json-header">
+            <span>NORMALIZED CANONICAL PAYLOAD</span>
+            <div class="json-actions">
+              <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.72rem;" onclick="toggleFormat('norm')">Format / Compact</button>
+              <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.72rem;" onclick="copyJson('norm')">Copy Normalized JSON</button>
+            </div>
+          </div>
+          <pre class="code-view minimized" id="inspect-norm-payload"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Element -->
+  <div class="toast" id="toastMessage"></div>
+
+  <script>
+    // State management
+    const eventsMap = new Map();
+    let currentCursor = null;
+    let nextCursor = null;
+    let activeTab = 'events';
+    let pollInterval = null;
+    let rawObjCache = null;
+    let normObjCache = null;
+
+    // Rate calculation state
+    let lastTotalCount = 0;
+    let lastCheckTime = performance.now();
+    const rateHistory = [];
+    const MAX_HISTORY = 40;
+
+    // Initialize throughput canvas
+    const canvas = document.getElementById('throughputChart');
+    const ctx = canvas.getContext('2d');
+    function resizeCanvas() {
+      canvas.width = canvas.parentElement.clientWidth - 40;
+      canvas.height = 180;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function showToast(msg) {
+      const toast = document.getElementById('toastMessage');
+      toast.innerText = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+      if (tab === 'events') {
+        event.currentTarget.classList.add('active');
+        document.getElementById('tab-events').classList.add('active');
+      } else {
+        event.currentTarget.classList.add('active');
+        document.getElementById('tab-health').classList.add('active');
+        fetchTelemetry();
+        resizeCanvas();
+        drawChart();
+      }
+    }
+
+    // Keyset pagination methods
+    function resetAndFetch() {
+      currentCursor = null;
+      fetchEvents();
+    }
+
+    function goToFirstPage() {
+      currentCursor = null;
+      fetchEvents();
+    }
+
+    function goToNextPage() {
+      if (nextCursor) {
+        currentCursor = nextCursor;
+        fetchEvents();
+      }
+    }
+
+    async function fetchEvents() {
+      const limit = document.getElementById('page-size').value;
+      const source = document.getElementById('filter-source').value;
+      let url = `/api/v1/events?limit=${limit}`;
+      if (currentCursor) {
+        url += `&cursor=${encodeURIComponent(currentCursor)}`;
+      }
+      if (source) {
+        url += `&source=${encodeURIComponent(source)}`;
+      }
+
+      document.getElementById('current-cursor-display').innerText = currentCursor ? currentCursor.substring(0, 16) + '...' : 'First Page';
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        renderEventsTable(data.items);
+        nextCursor = data.next_cursor;
+        const nextBtn = document.getElementById('btn-next-page');
+        nextBtn.disabled = !data.has_more;
+        document.getElementById('page-count-display').innerText = data.items.length;
+
+        // If on first page and no source filter, update aggregate stats
+        if (!currentCursor && !source && data.items.length > 0) {
+          const totalEstimate = data.items[0].id;
+          document.getElementById('stat-total-events').innerText = totalEstimate.toLocaleString();
+        }
+      } catch (err) {
+        console.error("Error fetching events:", err);
+      }
+    }
+
+    function renderEventsTable(items) {
+      eventsMap.clear();
+      const tbody = document.getElementById('events-table-body');
+      if (!items || items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2.5rem; color: var(--text-muted);">No events found matching current criteria.</td></tr>`;
+        return;
+      }
+
+      let html = '';
+      items.forEach(ev => {
+        eventsMap.set(ev.id, ev);
+        const isPublished = ev.outbox_published || ev.status === 'processed' || ev.status === 'failed';
+        const outboxBadge = isPublished
+          ? `<span class="badge badge-outbox-true">● Published</span>`
+          : `<span class="badge badge-outbox-false">○ Pending</span>`;
+
+        html += `
+          <tr>
+            <td style="font-family: var(--font-mono); font-weight: 700;">#${ev.id}</td>
+            <td><span class="badge badge-source">${ev.source}</span></td>
+            <td style="font-family: var(--font-mono); font-size: 0.8rem; color: #e2e8f0;">${ev.event_type}</td>
+            <td><span class="badge badge-status">${ev.status}</span></td>
+            <td>${outboxBadge}</td>
+            <td style="color: var(--text-muted); font-size: 0.78rem;">${new Date(ev.received_at).toLocaleString()}</td>
+            <td style="text-align: right;">
+              <button class="btn" style="padding: 0.25rem 0.55rem; font-size: 0.75rem;" onclick="openInspect(${ev.id})">
+                Inspect
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+    }
+
+    // Telemetry & Health polling
+    async function fetchTelemetry() {
+      try {
+        const res = await fetch('/api/v1/system/telemetry');
+        if (!res.ok) return;
+        const telem = await res.json();
+
+        // 1. Table Counts & Throughput
+        const dbTables = telem.components?.database?.tables;
+        if (dbTables) {
+          if (dbTables.raw_events !== undefined) {
+            document.getElementById('stat-total-events').innerText = dbTables.raw_events.toLocaleString();
+            calculateThroughput(dbTables.raw_events);
+          }
+          if (dbTables.processed_events !== undefined) {
+            document.getElementById('stat-outbox-processed').innerText = dbTables.processed_events.toLocaleString();
+          }
+          if (dbTables.outbox_pending !== undefined) {
+            document.getElementById('stat-outbox-pending').innerText = dbTables.outbox_pending.toLocaleString();
+          }
+        }
+
+        // 2. Host & Container System Resources
+        const sr = telem.system_resources;
+        if (sr) {
+          const ramUsed = (sr.system_ram_used_gb * 1024).toFixed(0);
+          const ramTotal = (sr.system_ram_total_gb * 1024).toFixed(0);
+          document.getElementById('metric-ram').innerText = `${ramUsed} MB / ${ramTotal} MB (${sr.system_ram_percent}%)`;
+          document.getElementById('fill-ram').style.width = `${sr.system_ram_percent}%`;
+
+          document.getElementById('metric-cpu').innerText = `${sr.cpu_percent}%`;
+          document.getElementById('fill-cpu').style.width = `${sr.cpu_percent}%`;
+
+          const diskUsed = (sr.disk_total_gb * (sr.disk_percent / 100)).toFixed(1);
+          document.getElementById('metric-disk').innerText = `${diskUsed} GB / ${sr.disk_total_gb} GB (${sr.disk_percent}%)`;
+          document.getElementById('fill-disk').style.width = `${sr.disk_percent}%`;
+        }
+
+        // 3. Render Service Topology Cards
+        renderTopologyCards(telem.components);
+      } catch (e) {
+        console.error("Telemetry fetch failed:", e);
+      }
+    }
+
+    function calculateThroughput(currentTotal) {
+      const now = performance.now();
+      const elapsedSec = (now - lastCheckTime) / 1000;
+      if (lastTotalCount > 0 && elapsedSec > 0.5) {
+        const delta = Math.max(0, currentTotal - lastTotalCount);
+        const rps = (delta / elapsedSec).toFixed(1);
+        document.getElementById('stat-rate').innerHTML = `${rps} <span style="font-size:0.9rem; font-weight:normal; color:var(--text-muted)">ev/s</span>`;
+        document.getElementById('live-rps-badge').innerText = `${rps} RPS`;
+
+        rateHistory.push(parseFloat(rps));
+        if (rateHistory.length > MAX_HISTORY) rateHistory.shift();
+        drawChart();
+      }
+      lastTotalCount = currentTotal;
+      lastCheckTime = now;
+    }
+
+    function drawChart() {
+      if (!ctx) return;
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Grid background
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+      ctx.lineWidth = 1;
+      for (let y = 30; y < h; y += 35) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      if (rateHistory.length < 2) {
+        // Draw baseline
+        ctx.strokeStyle = "rgba(99, 102, 241, 0.4)";
+        ctx.beginPath();
+        ctx.moveTo(0, h - 20);
+        ctx.lineTo(w, h - 20);
+        ctx.stroke();
+        return;
+      }
+
+      const maxVal = Math.max(...rateHistory, 10);
+      const stepX = w / (MAX_HISTORY - 1);
+
+      ctx.beginPath();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#10b981";
+
+      rateHistory.forEach((val, idx) => {
+        const x = idx * stepX;
+        const y = h - 20 - ((val / maxVal) * (h - 40));
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Subtle gradient under line
+      ctx.lineTo((rateHistory.length - 1) * stepX, h - 20);
+      ctx.lineTo(0, h - 20);
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, "rgba(16, 185, 129, 0.2)");
+      grad.addColorStop(1, "rgba(16, 185, 129, 0.0)");
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+
+    function renderTopologyCards(comps) {
+      const container = document.getElementById('container-topology-cards');
+      if (!comps) return;
+
+      const services = [
+        { key: 'api', name: 'API Gateway & Ingestion', role: 'FastAPI / Uvicorn', port: ':8000' },
+        { key: 'database', name: 'Primary Relational Store', role: 'PostgreSQL 16 Engine', port: ':5432' },
+        { key: 'rabbitmq', name: 'Message Broker', role: 'RabbitMQ AMQP Stream', port: ':5672' },
+        { key: 'worker', name: 'Event Consumer & Normalizer', role: 'Async Pipeline Worker', port: ':8001' },
+        { key: 'prometheus', name: 'Metrics Time-Series Store', role: 'Prometheus Server', port: ':9090' },
+        { key: 'grafana', name: 'Observability UI', role: 'Grafana Dashboards', port: ':3000' }
+      ];
+
+      let html = '';
+      services.forEach(s => {
+        const comp = comps[s.key];
+        const statusStr = comp ? (comp.status || comp) : 'down';
+        const isUp = ['healthy', 'active', 'monitoring', 'dashboards', 'up'].includes(String(statusStr).toLowerCase());
+        const statusColor = isUp ? 'var(--success)' : 'var(--danger)';
+        const statusBadge = isUp 
+          ? `<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3)">UP & RUNNING</span>`
+          : `<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3)">DOWN / OFFLINE</span>`;
+
+        let extraMetric = '';
+        if (s.key === 'database' && comp) {
+          const lat = comp.latency_ms !== undefined ? comp.latency_ms : '-';
+          const failedCount = comp.tables ? comp.tables.failed_events : 0;
+          extraMetric = `
+            <div class="metric-row" style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--card-border);">
+              <span>Query Latency:</span>
+              <span class="metric-val">${lat} ms</span>
+            </div>
+            <div class="metric-row">
+              <span>Dead Letters / Failed:</span>
+              <span class="metric-val">${failedCount}</span>
+            </div>
+          `;
+        }
+
+        html += `
+          <div class="container-card">
+            <div class="container-header">
+              <div class="container-name">
+                <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${statusColor};"></span>
+                ${s.name}
+              </div>
+              ${statusBadge}
+            </div>
+            <div class="metric-row">
+              <span>Process Role</span>
+              <span class="metric-val">${s.role}</span>
+            </div>
+            <div class="metric-row">
+              <span>Target Endpoint</span>
+              <span class="metric-val" style="color: #a5b4fc;">${s.port}</span>
+            </div>
+            ${extraMetric}
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // Modal Inspection Logic
+    async function openInspect(eventId) {
+      const eventData = eventsMap.get(eventId);
+      if (!eventData) return;
+
+      document.getElementById('inspect-title').innerText = `Inspect Event #${eventData.id} • ${eventData.source} • ${eventData.event_type}`;
+      
+      rawObjCache = eventData.payload;
+      normObjCache = eventData.normalized_payload || { status: "loading..." };
+
+      // Set default minimized single line
+      const rawEl = document.getElementById('inspect-raw-payload');
+      const normEl = document.getElementById('inspect-norm-payload');
+
+      rawEl.innerText = JSON.stringify(rawObjCache);
+      rawEl.classList.add('minimized');
+
+      normEl.innerText = JSON.stringify(normObjCache);
+      normEl.classList.add('minimized');
+
+      document.getElementById('inspectModal').classList.add('open');
+
+      // Fetch complete event details to ensure latest canonical normalized payload & error history
+      try {
+        const res = await fetch(`/api/v1/events/${eventId}`);
+        if (res.ok) {
+          const detail = await res.json();
+          if (detail.processed_record && detail.processed_record.normalized_data) {
+            normObjCache = detail.processed_record.normalized_data;
+          } else if (detail.raw_event && detail.raw_event.status === 'failed') {
+            normObjCache = {
+              status: "failed",
+              failure_history: detail.failure_history || []
+            };
+          } else {
+            normObjCache = {
+              status: "pending_worker_processing",
+              message: "Event is queued in RabbitMQ or currently being processed by worker."
+            };
+          }
+          if (normEl.classList.contains('minimized')) {
+            normEl.innerText = JSON.stringify(normObjCache);
+          } else {
+            normEl.innerText = JSON.stringify(normObjCache, null, 2);
+          }
+        }
+      } catch (err) {
+        console.error("Failed fetching event details:", err);
+      }
+    }
+
+    function toggleFormat(type) {
+      const el = document.getElementById(type === 'raw' ? 'inspect-raw-payload' : 'inspect-norm-payload');
+      const obj = type === 'raw' ? rawObjCache : normObjCache;
+      
+      if (el.classList.contains('minimized')) {
+        el.innerText = JSON.stringify(obj, null, 2);
+        el.classList.remove('minimized');
+      } else {
+        el.innerText = JSON.stringify(obj);
+        el.classList.add('minimized');
+      }
+    }
+
+    function copyJson(type) {
+      const obj = type === 'raw' ? rawObjCache : normObjCache;
+      navigator.clipboard.writeText(JSON.stringify(obj, null, 2)).then(() => {
+        showToast(`Copied ${type.toUpperCase()} JSON to clipboard!`);
+      }).catch(err => {
+        showToast("Failed to copy to clipboard.");
+      });
+    }
+
+    function closeModal() {
+      document.getElementById('inspectModal').classList.remove('open');
+    }
+
+    function closeInspect(e) {
+      if (e.target.id === 'inspectModal') closeModal();
+    }
+
+    // Retention Cleanup Trigger
+    async function executeManualRetention() {
+      const btn = document.getElementById('btn-prune');
+      const msg = document.getElementById('retention-status-msg');
+      btn.disabled = true;
+      msg.innerText = "Executing pruning cycle...";
+
+      let apiKey = localStorage.getItem('admin_api_key') || 'dev-admin-key';
+
+      try {
+        let res = await fetch('/api/v1/events/retention/cleanup', {
+          method: 'POST',
+          headers: {
+            'X-API-Key': apiKey,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (res.status === 401) {
+          const customKey = prompt("Enter Admin API Key (REPLAY_API_KEY):", apiKey);
+          if (customKey) {
+            apiKey = customKey.trim();
+            localStorage.setItem('admin_api_key', apiKey);
+            res = await fetch('/api/v1/events/retention/cleanup', {
+              method: 'POST',
+              headers: {
+                'X-API-Key': apiKey,
+                'Content-Type': 'application/json'
+              }
+            });
+          }
+        }
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        showToast(`Purged ${data.outbox_deleted} outbox & ${data.raw_events_deleted} raw logs.`);
+        msg.innerText = `Last pruned at ${new Date().toLocaleTimeString()}`;
+        fetchTelemetry();
+        fetchEvents();
+      } catch (err) {
+        showToast(`Retention prune failed: ${err.message}`);
+        msg.innerText = `Pruning failed: ${err.message}`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function triggerRefresh() {
+      fetchEvents();
+      fetchTelemetry();
+      showToast("Telemetry & stream refreshed.");
+    }
+
+    // Automatic polling loop
+    fetchEvents();
+    fetchTelemetry();
+    setInterval(() => {
+      fetchEvents();
+      fetchTelemetry();
+    }, 3000);
+  </script>
+</body>
+</html>

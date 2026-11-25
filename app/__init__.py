@@ -1,0 +1,2 @@
+"""Event Ingestion Service Package."""
+
