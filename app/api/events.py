@@ -5,13 +5,13 @@ from typing import Any, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import status as http_status
-from sqlalchemy import CursorResult, and_, exists, func, or_, select, update
+from sqlalchemy import CursorResult, and_, delete, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.models import FailedEvent, OutboxEvent, RawEvent
+from app.models import FailedEvent, OutboxEvent, ProcessedEvent, RawEvent
 from app.queue import rabbitmq_client
 from app.retention import run_retention_cleanup
 from app.schemas import (
@@ -20,6 +20,8 @@ from app.schemas import (
     ProcessedEventResponse,
     RawEventResponse,
     ReplayResponse,
+    ResetIngestlyRequest,
+    ResetIngestlyResponse,
     RetentionCleanupResponse,
 )
 from app.security import verify_admin_auth
@@ -172,6 +174,48 @@ async def trigger_retention_cleanup(db: AsyncSession = Depends(get_db)):
         outbox_deleted=res["outbox_deleted"],
         raw_events_deleted=res["raw_events_deleted"],
         message=f"Purged {res['outbox_deleted']} outbox rows and {res['raw_events_deleted']} expired raw events."
+    )
+
+
+@router.post(
+    "/events/reset",
+    response_model=ResetIngestlyResponse,
+    summary="Delete all events, outbox, processed, and failed records",
+    dependencies=[Depends(verify_admin_auth)],
+)
+async def reset_ingestly(body: ResetIngestlyRequest, db: AsyncSession = Depends(get_db)):
+    if body.confirm != "clear-ingestly":
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Confirmation string must be 'clear-ingestly'.",
+        )
+
+    failed_res = cast(CursorResult[Any], await db.execute(delete(FailedEvent)))
+    processed_res = cast(CursorResult[Any], await db.execute(delete(ProcessedEvent)))
+    outbox_res = cast(CursorResult[Any], await db.execute(delete(OutboxEvent)))
+    raw_res = cast(CursorResult[Any], await db.execute(delete(RawEvent)))
+    await db.commit()
+
+    failed_deleted = failed_res.rowcount or 0
+    processed_deleted = processed_res.rowcount or 0
+    outbox_deleted = outbox_res.rowcount or 0
+    raw_deleted = raw_res.rowcount or 0
+    logger.warning(
+        "Full Ingestly reset executed: raw=%d outbox=%d processed=%d failed=%d",
+        raw_deleted,
+        outbox_deleted,
+        processed_deleted,
+        failed_deleted,
+    )
+    return ResetIngestlyResponse(
+        failed_deleted=failed_deleted,
+        processed_deleted=processed_deleted,
+        outbox_deleted=outbox_deleted,
+        raw_events_deleted=raw_deleted,
+        message=(
+            f"Cleared {raw_deleted} raw, {processed_deleted} processed, "
+            f"{outbox_deleted} outbox, and {failed_deleted} failed records."
+        ),
     )
 
 

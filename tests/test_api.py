@@ -99,7 +99,7 @@ async def test_dashboard_endpoint(client: AsyncClient):
 
     resp = await client.get("/dashboard", headers={"X-API-Key": settings.REPLAY_API_KEY})
     assert resp.status_code == 200
-    assert "Event Ingestion Console" in resp.text
+    assert "Ingestly" in resp.text
 
 
 @pytest.mark.asyncio
@@ -501,6 +501,37 @@ async def test_list_events_sort_and_column_filters(client: AsyncClient):
     assert r_filt.status_code == 200
     assert r_filt.json()["total"] == 1
     assert r_filt.json()["items"][0]["id"] == first_id
+
+
+@pytest.mark.asyncio
+async def test_reset_ingestly_requires_auth_and_confirmation(client: AsyncClient):
+    from app.config import settings
+
+    await client.post("/api/v1/events", json={"delivery_id": "rst-1", "event_type": "rst.test", "data": {}})
+
+    # Missing admin key -> 401
+    r_unauth = await client.post("/api/v1/events/reset", json={"confirm": "clear-ingestly"})
+    assert r_unauth.status_code == 401
+
+    # Wrong confirmation string -> 400
+    r_bad = await client.post(
+        "/api/v1/events/reset",
+        json={"confirm": "wrong"},
+        headers={"X-API-Key": settings.REPLAY_API_KEY},
+    )
+    assert r_bad.status_code == 400
+
+    # Valid admin key + exact confirmation -> 200 and empty table
+    r_ok = await client.post(
+        "/api/v1/events/reset",
+        json={"confirm": "clear-ingestly"},
+        headers={"X-API-Key": settings.REPLAY_API_KEY},
+    )
+    assert r_ok.status_code == 200
+    assert r_ok.json()["raw_events_deleted"] >= 1
+
+    r_list = await client.get("/api/v1/events")
+    assert r_list.json()["total"] == 0
 
 
 

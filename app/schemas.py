@@ -71,3 +71,15 @@ class RetentionCleanupResponse(BaseModel):
     outbox_deleted: int
     raw_events_deleted: int
     message: str
+
+
+class ResetIngestlyRequest(BaseModel):
+    confirm: str = Field(..., description="Must be 'clear-ingestly' to confirm full reset")
+
+
+class ResetIngestlyResponse(BaseModel):
+    failed_deleted: int
+    processed_deleted: int
+    outbox_deleted: int
+    raw_events_deleted: int
+    message: str
