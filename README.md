@@ -2,9 +2,11 @@
 
 ![CI Pipeline](https://github.com/Amey-Kulkarni1/ingestly/actions/workflows/ci.yml/badge.svg)
 
-A high-throughput, fault-tolerant webhook & event ingestion service built with **FastAPI**, **RabbitMQ**, **PostgreSQL**, and **Docker**.
+A reliable, fault-tolerant webhook & event ingestion service built with **FastAPI**, **RabbitMQ**, **PostgreSQL**, and **Docker**.
 
-The service acknowledges incoming webhooks within milliseconds (`202 Accepted`), persists events atomically with a **Transactional Outbox**, enforces two-tier idempotency, handles transient failures via **multi-tier non-blocking TTL retry queues** (`5s -> 30s -> 5m`), routes poisoned messages to a Dead-Letter Queue (DLQ), and exposes authenticated query, replay, retention, and observability APIs.
+Ingestly acknowledges incoming webhooks with low latency (`~60 ms` p50 unloaded, `202 Accepted`), persists events atomically with a **Transactional Outbox**, enforces two-tier idempotency, handles transient failures via **multi-tier TTL retry queues** (`5s -> 30s -> 5m`), routes poisoned messages to a Dead-Letter Queue (DLQ), and exposes authenticated query, replay, retention, and observability APIs.
+
+**Delivery guarantee:** At-least-once delivery; duplicates are absorbed by two-tier idempotency (not exactly-once).
 
 ---
 
@@ -41,6 +43,14 @@ The service acknowledges incoming webhooks within milliseconds (`202 Accepted`),
 
 ---
 
+## Operations Dashboard
+
+![Ingestly Operations Console](docs/dashboard.png)
+
+Authenticated via HTTP Basic Auth (any username, `REPLAY_API_KEY` as password) or `X-API-Key` / `Bearer` header at `http://localhost:8000/dashboard`.
+
+---
+
 ## Tech Stack
 
 - **Ingress API:** FastAPI, Uvicorn (async HTTP)
@@ -53,12 +63,29 @@ The service acknowledges incoming webhooks within milliseconds (`202 Accepted`),
 
 ---
 
+## Project Layout
+
+```text
+app/          FastAPI ingress, query/replay APIs, SQLAlchemy models, security, outbox & retention
+worker/       Async RabbitMQ consumer, tiered TTL retries, DLQ handling, SIGTERM graceful drain
+alembic/      Database schema migrations and indexes
+tests/        Unit tests (SQLite) and live PostgreSQL + RabbitMQ integration tests
+scripts/      Synthetic traffic and fault-injection load generators
+docker/       Prometheus scrape config and Grafana provisioning + alert rules
+```
+
+See [PRODUCT.md](PRODUCT.md) for product context and operational principles.
+
+---
+
 ## One-Command Quickstart
 
 ```bash
-cp .env.example .env   # Edit secrets before running in non-local environments
-docker compose up --build
+cp .env.example .env   # Required: sets DB, RabbitMQ, API keys, and Grafana credentials
+docker compose up --build --wait
 ```
+
+Required variables in `.env` (no secret defaults are committed in code or `docker-compose.yml`): `POSTGRES_USER`, `POSTGRES_PASSWORD`, `DATABASE_URL`, `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS`, `RABBITMQ_URL`, `WEBHOOK_SECRET`, `INGEST_API_KEY`, `REPLAY_API_KEY`, `GRAFANA_ADMIN_USER`, and `GRAFANA_ADMIN_PASSWORD`.
 
 ### Services & Ports
 
@@ -70,6 +97,26 @@ docker compose up --build
 | **Grafana** | `http://localhost:3000` | Dashboards & outbox backlog alerts (credentials from `.env`) |
 | **PostgreSQL** | `localhost:5432` | Storage (credentials from `.env`) |
 
+### API Quick Example
+
+Send an event (`202 Accepted`), then resend the same `delivery_id` (`200 OK` duplicate absorbed):
+
+```bash
+# 1. First delivery -> 202 Accepted
+curl -s -X POST http://localhost:8000/api/v1/events \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: change-me-ingest-key" \
+  -d '{"delivery_id":"evt-1001","source":"checkout","event_type":"order.created","data":{"order_id":"ord_42"}}'
+# {"status":"accepted","delivery_id":"evt-1001","message":"Event accepted and queued for processing."}
+
+# 2. Duplicate delivery -> 200 OK
+curl -s -X POST http://localhost:8000/api/v1/events \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: change-me-ingest-key" \
+  -d '{"delivery_id":"evt-1001","source":"checkout","event_type":"order.created","data":{"order_id":"ord_42"}}'
+# {"status":"duplicate","delivery_id":"evt-1001","message":"Event has already been received and queued/processed."}
+```
+
 ---
 
 ## Design Decisions
@@ -80,7 +127,7 @@ docker compose up --build
    - *Ingress Tier:* Atomic unique constraint on `(delivery_id, source)` in `raw_events`. Duplicate deliveries return `200 OK` (`status: "duplicate"`).
    - *Worker Tier:* Unique constraints on `processed_events` (`delivery_id`, `raw_event_id`). The worker commits `processed_events` + `raw_events.status = 'processed'` *before* calling `message.ack()`, so a crash before `ack()` results in an idempotent redelivery rather than lost or duplicated work.
 3. **Multi-Tier Non-Blocking TTL Retries:**
-   Instead of a single fixed-delay retry queue (which causes head-of-line blocking), transient failures route through tiered dead-letter queues (`events.retry.5s`, `events.retry.30s`, `events.retry.5m`), immediately freeing worker concurrency slots. Permanent errors (`PermanentEventError`, malformed JSON) route directly to `events.dlq`.
+   Per-queue TTLs (`events.retry.5s`, `events.retry.30s`, `events.retry.5m`) avoid the head-of-line blocking that occurs when variable-delay per-message TTLs share a single queue, and routing failed messages to those queues frees worker concurrency slots immediately for new messages. With default `MAX_RETRIES=3` (1 initial attempt + 2 retries), transient failures traverse `5s` then `30s` (`35s` total retry wait) before dead-lettering to `events.dlq`; the `5m` tier is pre-declared for `MAX_RETRIES >= 4`. Permanent errors (`PermanentEventError`, malformed JSON) route directly to `events.dlq`.
 4. **Streaming Body Cap & Constant-Time Auth:**
    Ingress checks `Content-Length` and streams `request.stream()` with a running byte cap before buffering or parsing JSON, preventing memory exhaustion. API keys and HMAC-SHA256 signatures are verified with `hmac.compare_digest` against the raw request bytes, with optional `X-Webhook-Timestamp` replay-window enforcement.
 5. **Batched Retention & Indexed Keyset Pagination:**
@@ -90,6 +137,10 @@ docker compose up --build
 
 ## Known Limitations
 
+- **Single Uvicorn Worker:** The API container runs one Uvicorn worker process, so peak throughput is bound by a single Python event loop.
+- **Single-Node Broker & Database:** Docker Compose runs a single RabbitMQ node and a single PostgreSQL instance with no HA or automatic failover.
+- **Co-Located Laptop Benchmark:** Benchmarks ran on a developer laptop with all 6 containers and the load generator sharing the same host; treat the absolute throughput/latency numbers as relative.
+- **Outbox Fallback Latency:** When the immediate RabbitMQ publish fails, the background outbox reconciler polls every `2s`, adding up to ~2s of delivery delay.
 - **In-Memory Rate Limiter:** The sliding-window rate limiter (`app/security.py`) stores counters per process; in a multi-replica deployment, replace it with a Redis-backed limiter for cluster-wide enforcement.
 - **Fixed Retry Tier Topology:** Retry delays (`RETRY_DELAYS_SECONDS="5,30,300"`) map to pre-declared RabbitMQ queues; changing delays requires declaring new queues or purging old ones.
 - **Optional Webhook Timestamp Header:** Replay-window validation (`X-Webhook-Timestamp`) is enforced when the header is present; producers like standard GitHub webhooks that omit a timestamp header rely on HMAC + `(delivery_id, source)` deduplication.
@@ -121,10 +172,10 @@ python scripts/send_fake_events.py --api-key <INGEST_API_KEY> --count 500 --conc
 
 ### End-to-End Drain & Deduplication Proof
 
-After both runs (`176 + 438 = 614` accepted events) and a 40s drain window for the `5s -> 30s` retry tiers to exhaust on `error.simulate` events, PostgreSQL verified zero lost or stuck events and zero duplicate leaks:
+After both runs (`176 + 438 = 614` accepted events) and a 40s drain window (`5s + 30s = 35s` retry wait under `MAX_RETRIES=3`), PostgreSQL verified zero lost or stuck events and zero duplicate leaks:
 
 - `SELECT count(*), count(DISTINCT (delivery_id, source)) FROM raw_events;` → **`614` / `614`** (0 duplicate leaks)
-- `SELECT status, count(*) FROM raw_events GROUP BY status;` → **`584 processed` + `30 failed` = `614` terminal** (`0` stuck in `received`/`queued`/`processing`)
+- `SELECT status, count(*) FROM raw_events GROUP BY status;` → **`584 processed` + `30 failed` = `614` terminal** (`0` stuck in `received`/`queued`/`processing`; the `30 failed` rows are injected `error.simulate` events that exhausted `MAX_RETRIES=3` and were dead-lettered to `events.dlq` with matching rows in `failed_events`)
 - `SELECT count(*) FROM outbox_events WHERE published = false;` → **`0`**
 
 ### Request-Path Latency Breakdown & Tradeoff
@@ -140,12 +191,14 @@ External host-to-container HTTP latency adds Docker Desktop NAT loopback overhea
 
 ## Running Tests & Quality Checks
 
+The PostgreSQL + RabbitMQ integration tests in [tests/test_postgres_integration.py](tests/test_postgres_integration.py) require `INTEGRATION_DATABASE_URL` and `INTEGRATION_RABBITMQ_URL`, so they **skip locally** when those variables are unset and **run automatically in GitHub Actions CI** against live service containers.
+
 ```bash
 # Lint & Type Check
 ruff check app worker tests
 mypy app worker
 
-# Unit & Logic Tests (in-memory SQLite)
+# Unit & Logic Tests (in-memory SQLite; integration tests skip without INTEGRATION_* env vars)
 pytest -v
 
 # Full Integration Tests (against live PostgreSQL + RabbitMQ)
